@@ -8,10 +8,17 @@ import java.util.Random;
 
 public class Main {
 
-    //number of Monte Carlo trials in sample
-    public static final long MC = 2000;
+    //number of Boltzmann learning steps
+    public static final long BOLTZ = 50;
     //learning rate for Boltzmann learning
-    public static final double ETA = .1;
+    public static final double ETA = .05;
+    //number of steps in walking for MMC
+    public static final long MC_WALK = 100000;
+    //number of rejections per sample for MMC
+    public static final long MC_RATE = 1000;
+    //number of Monte Carlo trials in thermalAverage; not currently in use
+    public static final long MC = 5000;
+
 
     /**
      * main function
@@ -19,38 +26,55 @@ public class Main {
      * @param args
      */
     public static void main(String args[]) {
-        Scanner scan;
+        
+        // the below code scans a file for an MSA in FASTA format
+        // <editor-fold defaultstate="collapsed" desc="Scan File">
+        Scanner fileScanner;
         try {
-            scan = new Scanner(new File("cytochrome.fasta"));
+            fileScanner = new Scanner(new File("cameroonp7.fasta"));
         } catch (FileNotFoundException e) {
             System.out.println(e.toString());
             return;
         }
-        ArrayList<String> alignments = processMSA(scan);
-        String consensus = "--------GDVEKGKKIFIMKCSQCHTVEKGGKHKTGPNLHGLFGRKTGQAPGYSY";
+        // </editor-fold>
+        
+        // the below code processes the scanner made above to create an MSA (multiple sequence alignment)
+        // <editor-fold defaultstate="collapsed" desc="Create MSA">
+        ArrayList<String> names = new ArrayList<>();
+        ArrayList<String> alignments = processMSA(fileScanner, names);
+        String consensus = "----------------------------------------------------AGPIPPGQMREPRGSDIAGTTSTLQEQIGWMTSNPPIPVGEIYKRWIILGLNKIVRMYSPVSILDIRQGPKEPFRDYVDRFFKTLRAEQATQEVKNWMTETLLVQNANPDCKSILRALGPGATLEEMMTACQGVGGPGHKARVLAEAMS--QV-Q--QANIMMQRGNFRGQRT-IKCFNCGKEGHLARNCKAPRKKGCWKCGKEGHQMKDCTERQANFLG-";
+        System.out.println("MSA SIZE: " + alignments.size());
+        System.out.println("CONSENSUS LENGTH: " + consensus.length());
         ArrayList<Byte[]> bitAlignments = new ArrayList<>();
-        bitAlignments.add(proteinToBitString(consensus, consensus));
         alignments.stream().forEach((s) -> {
+            System.out.println(s);
             bitAlignments.add(proteinToBitString(consensus, s));
         });
+        // </editor-fold>
+        
+        // the below code creates Hamiltonian Constants h_i and J_ij
+        // <editor-fold defaultstate="collapsed" desc="Generate Hamiltonian Constants">
         double h[] = new double[consensus.length()];
-        double J[][] = new double[consensus.length()][consensus.length()];
+        double J[][];
         double singleProbs[] = calculateSingleMutationalProbabilities(bitAlignments, consensus.length());
         System.out.println("Done with single probs");
         double doubleProbs[][] = calculateDoubleMutationalProbabilities(bitAlignments, consensus.length());
         System.out.println("Done with double probs");
+        long timer = System.currentTimeMillis();
+        J = estimateJ(singleProbs, doubleProbs, consensus.length());
         HamiltonianConstants hc = boltzmannLearn(singleProbs, doubleProbs, consensus.length(), h, J);
+        // </editor-fold>
+
+        //the below code evaluates the Hamiltonian for each input sequence
+        for (int i = 0; i < bitAlignments.size(); i++) {
+            System.out.println(names.get(i) + ": " + evaluateHamiltonian(bitAlignments.get(i), hc.getH(), hc.getJ()));
+        }
         
-        //this is just a toy example that has nothing to do with HIV
-        System.out.println("TUNA: " + evaluateHamiltonian(bitAlignments.get(1), hc.getH(), hc.getJ()));
-        System.out.println("GRAY WHALE: " + evaluateHamiltonian(bitAlignments.get(2), hc.getH(), hc.getJ()));
-        System.out.println("SNAPPING TURTLE: " + evaluateHamiltonian(bitAlignments.get(3), hc.getH(), hc.getJ()));
-        System.out.println("RHESUS MONKEY: " + evaluateHamiltonian(bitAlignments.get(4), hc.getH(), hc.getJ()));
-        //this is just to test that I am correctly calculating energy
+        System.out.println("TIME: " + (long) (System.currentTimeMillis() - timer));
     }
 
     /**
-     * Process MSA (Multiple Sequence Alignment)
+     * Process MSA (Multiple Sequence Alignment).
      *
      * This processes an MSA from an input stream in FASTA format. First, it
      * essentially just converts the stream MSA into a list of sequences
@@ -59,24 +83,29 @@ public class Main {
      * a file)
      * @return ArrayList<String> containing each sequence from the MSA in order
      */
-    public static ArrayList<String> processMSA(Scanner scan) {
+    public static ArrayList<String> processMSA(Scanner scan, ArrayList<String> names) {
         ArrayList<String> out = new ArrayList<>();
         String curString = "";
         while (scan.hasNextLine()) {
             String a = scan.nextLine();
-            if (a.substring(0, 1).equals(">")) {
+            if (a.equals("")) {
+                //skip this line
+            } else if (a.substring(0, 1).equals(">")) {
                 out.add(curString);
                 curString = "";
+                System.out.println(a);
+                names.add(a.substring(1, a.length()));
             } else {
                 curString += removeWhitespace(a);
             }
         }
+        out.add(curString);
         out.remove(0);
         return out;
     }
 
     /**
-     * Remove Whitespace function
+     * Remove Whitespace function.
      *
      * Helper function for processMSA to remove whitespace
      *
@@ -94,7 +123,7 @@ public class Main {
     }
 
     /**
-     * Protein to Bit String Function
+     * Protein to Bit String Function.
      *
      * Converts an amino acid sequence into a binary number using a consensus
      * sequence. Converts each amino acid to {0,1}. 0 denotes the "wild-type"
@@ -115,7 +144,7 @@ public class Main {
     }
 
     /**
-     * Boolean to Byte Function
+     * Boolean to Byte Function.
      *
      * Helper method for Protein to BitString
      *
@@ -127,7 +156,7 @@ public class Main {
     }
 
     /**
-     * Evaluate Hamiltonian Function
+     * Evaluate Hamiltonian Function.
      *
      * Evaluates the Ising model Hamiltonian given its input. The Ising model
      * Hamiltonian is used in the fitness model for HIV. Given constant vector h
@@ -177,7 +206,7 @@ public class Main {
     }
 
     /**
-     * Boltzmann Learning function
+     * Boltzmann Learning function.
      *
      * Generates constant vectors h_i and J_ij for an MSA. The process is to run
      * through the Hamiltonian and in each step, edit h and J such that they
@@ -186,7 +215,7 @@ public class Main {
      * @param singleProbs Observed mutational probabilities at each locus
      * @param doubleProbs Observed double mutational probabilities at each pair
      * of loci
-     * @param length
+     * @param length    length of protein
      * @param h Initial value for h, the constant vector
      * @param J Initial value for J, the constant vector
      * @return HamiltonianConstants object containing corrected constant values
@@ -195,42 +224,21 @@ public class Main {
         int count = 0;
         double[] delta_h = new double[h.length];
         double[][] delta_J = new double[J.length][J[0].length];
-        for (int i = 0; i < length; i++) {
-            delta_h[i] = ETA * (singleProbs[i]);
-            for (int j = i + 1; j < length; j++) {
-                delta_J[i][j] = ETA * (doubleProbs[i][j]);
-            }
-        }
-        for (int i = 0; i < h.length; i++) {
-            h[i] += delta_h[i];
-        }
-        for (int i = 0; i < length; i++) {
-            for (int j = i + 1; j < length; j++) {
-                J[i][j] = J[i][j] + delta_J[i][j];
-            }
-        }
-        while (count++ < 5) { //TODO: make it so this only terminates when delta_h and delta_J are small enough
+        System.out.println("Entering the Boltzmann loop");
+        while (count++ < BOLTZ) {
             for (int i = 0; i < length; i++) {
-                delta_h[i] = ETA * (singleProbs[i] - thermalAverage(i, length, h, J));
-                for (int j = i + 1; j < length; j++) {
-                    delta_J[i][j] = ETA * (doubleProbs[i][j] - thermalAverage(i, j, length, h, J));
-                }
+                delta_h[i] = ETA * (singleProbs[i] - MMC(i,length,h,J));
             }
             for (int i = 0; i < h.length; i++) {
                 h[i] += delta_h[i];
             }
-            for (int i = 0; i < length; i++) {
-                for (int j = i + 1; j < length; j++) {
-                    J[i][j] = J[i][j] + delta_J[i][j];
-                }
-            }
-            System.out.println("Learning step: "+count);
+            System.out.println("Learning step: " + count);
         }
         return new HamiltonianConstants(h, J);
     }
 
     /**
-     * Thermal Averaging function (one position)
+     * Thermal Averaging function (one position).
      *
      * Finds the average over the Ising distribution of a position. This finds,
      * essentially, a weighted sum of all possible sequences in the Hamiltonian
@@ -238,6 +246,11 @@ public class Main {
      * computationally intensive, so we instead take a Monte Carlo sample of the
      * possible sequences (20,000 trials) and take that average instead. This
      * sacrifices accuracy but gains efficiency.
+     * 
+     * Thermal averaging of one position is not currently in use, replaced by
+     * MMC (Metropolis Monte Carlo). That function does essentially the same thing,
+     * except that it should be computationally much faster than the
+     * thermal average function with equal or greater accuracy.
      *
      * @param position position of amino acid that is mutated
      * @param length length of bit string protein (number of amino acids)
@@ -261,7 +274,7 @@ public class Main {
     }
 
     /**
-     * Thermal Averaging function (two positions)
+     * Thermal Averaging function (two positions).
      *
      * Finds the average over the Ising distribution of a position. This finds,
      * essentially, a weighted sum of all possible sequences in the Hamiltonian
@@ -269,6 +282,10 @@ public class Main {
      * computationally intensive, so we instead take a Monte Carlo sample of the
      * possible sequences (20,000 trials) and take that average instead. This
      * sacrifices accuracy but gains efficiency.
+     * 
+     * Thermal averaging of two positions is not currently in use because we can
+     * estimate J with reasonable accuracy in a different way.
+     *
      * @param position1 position of one mutated amino acid
      * @param position2 position of other mutated amino acid
      * @param size length of bit string protein (number of amino acids)
@@ -292,11 +309,11 @@ public class Main {
     }
 
     /**
-     * Calculates mutational probabilities by averaging them over the MSA
-     * 
-     * @param msa       Bytestring MSA
-     * @param length    length of each
-     * @return          Probability of each mutation
+     * Calculates mutational probabilities by averaging them over the MSA.
+     *
+     * @param msa Bytestring MSA
+     * @param length length of each
+     * @return Probability of each mutation
      */
     public static double[] calculateSingleMutationalProbabilities(ArrayList<Byte[]> msa, int length) {
         double[] avgs = new double[length];
@@ -308,16 +325,15 @@ public class Main {
         for (int i = 0; i < length; i++) {
             avgs[i] /= msa.size();
         }
-
         return avgs;
     }
 
     /**
-     * Calculates double mutational probabilities by averaging them over the MSA
-     * 
-     * @param msa       Bytestring MSA
-     * @param length    length of each
-     * @return          Probability of each double mutation
+     * Calculates double mutational probabilities by averaging them over the MSA.
+     *
+     * @param msa Bytestring MSA
+     * @param length length of each
+     * @return Probability of each double mutation
      */
     public static double[][] calculateDoubleMutationalProbabilities(ArrayList<Byte[]> msa, int length) {
         double[][] avgs = new double[length][length];
@@ -334,5 +350,117 @@ public class Main {
             }
         }
         return avgs;
+    }
+
+    /**
+     * Estimates J using the Independent-Pair Approximation.
+     * 
+     * This is an estimation of the J constants (not great accuracy but decent
+     * for my purposes) from Roudi et. al. 2009. Added this because using Boltzmann
+     * learning to calculate J is extremely computationally intensive and this
+     * has (apparently) a decent level of accuracy.
+     *
+     * @param singleMutations   Single mutational probabilities vector
+     * @param doubleMutations   Double mutational probabilities matrix
+     * @param length            Length of protein
+     * @return                  Matrix of all J_ij where j > i
+     */
+    public static double[][] estimateJ(double[] singleMutations, double[][] doubleMutations, int length) {
+        double[][] J = new double[length][length];
+        for (int i = 0; i < length; i++) {
+            for (int j = i + 1; j < length; j++) {
+                double sub = doubleMutations[i][j] / ((1 + singleMutations[i]) * (1 + singleMutations[j]));
+                J[i][j] = .25 * Math.log(1 + sub);
+            }
+        }
+        System.out.println("J estimated");
+        return J;
+    }
+
+    /**
+     * MMC (Metropolis Monte Carlo) Function.
+     * 
+     * Follows basic sampling procedures found in the Supplementary Methods of 
+     * Ferguson et. al. This is essentially the same as the thermal average function,
+     * but instead of generating random sequences each time, it "steps" through
+     * all possible states (as in a Markov Chain) and records the CHANGE in energy
+     * each time. That way, evaluateHamiltonian() is only called once. Then we
+     * just record every MC_RATE state and average.
+     * 
+     * This used to be done differently, rejecting based on whether or not it increased
+     * the energy. I used this algorithm from Beichl and Sullivan, 2000. However,
+     * this was a mistake to use because it is useful for finding a local minimum
+     * of maximum but not for taking a straight average.
+     * 
+     * @param position  position of amino acid that is mutated
+     * @param length    length of protein
+     * @param h         current h vector
+     * @param J         current J matrix
+     * @return          double representing the thermal average over the Ising distribution
+     */
+    public static double MMC(int position, int length, double[] h, double[][] J) {
+        Random rand = new Random();
+        Byte[] sigma = new Byte[length];
+        for (int i = 0; i < length; i++) {
+            sigma[i] = 0;
+        }
+        sigma[position] = 1; //position is the place that must be mutated for a proper average
+        double sum = 0.0;
+        int count = 1;
+        double E = evaluateHamiltonian(sigma, h, J);
+        sum += E;
+        while (count < MC_WALK) {
+            int toChange = rand.nextInt(length);
+
+            while (toChange == position) {
+                toChange = rand.nextInt(length); //ensures that we don't change position
+            }
+            if (sigma[toChange] == 1) {
+                sigma[toChange] = 0;
+            } else {
+                sigma[toChange] = 1;
+            }
+            
+            E += calculateDeltaE(toChange, length, h, J, sigma);
+            if (count%MC_RATE == 0) sum+=E;
+            count++;
+        }
+        return sum/((int)(count/MC_RATE));
+    }
+
+    /**
+     * Helper method for MMC to calculate the deltaE (change in energy).
+     * 
+     * This essentially allows a much faster sampling because we don't have to
+     * go through the entire evaluateHamiltonian() step in order to find the new
+     * energy of the system after a single flip in the Monte Carlo MMC().
+     * 
+     * @param change    amino acid that was changed
+     * @param length    length of protein
+     * @param h         h vector of Ising
+     * @param J         J matrix of Ising
+     * @param sigma     Byte Array of protein containing elements from the set {0,1}
+     * @return          delta E of the new state
+     */
+    private static double calculateDeltaE(int change, int length, double[] h, double[][] J, Byte[] sigma) {
+        double delta_E = 0.0;
+        if (change == 0) { //this means that it has been changed to a 0 from a 1
+            delta_E -= h[change]; //sigma[change]*h[change] used to be in E, but it is no longer
+            for (int j = change + 1; j < length; j++) { //sigma[j]*sigma[change]*J[change][j] is no longer in E
+                delta_E -= J[change][j]*sigma[j];
+            }
+            for (int i = 0; i < change; i++) { //sigma[i]*sigma[change]*J[i][change] is no longer in E
+                delta_E -= J[i][change]*sigma[i];
+            }
+        } else { //this means that is has been changed to a 1 from a 0
+            delta_E += h[change]; //we now include h[change]*sigma[change]
+            for (int j = change + 1; j < length; j++) { //sigma[j]*sigma[change]*J[change][j] is added
+                delta_E += J[change][j]*sigma[j];
+            }
+            for (int i = 0; i < change; i++) { //sigma[i]*sigma[change]*J[i][change] is added
+                delta_E += J[i][change]*sigma[i];
+            }
+        }
+        return delta_E;
     }
 }
