@@ -1,21 +1,27 @@
 
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.ObjectOutputStream;
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Scanner;
 import java.util.Random;
-
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class Main {
 
     //number of Boltzmann learning steps
-    public static final long BOLTZ = 50;
+    public static final long BOLTZ = 10;
     //learning rate for Boltzmann learning
     public static final double ETA = .05;
     //number of steps in walking for MMC
-    public static final long MC_WALK = 100000;
+    public static final long MC_WALK = 10000; //100000;
     //number of rejections per sample for MMC
     public static final long MC_RATE = 1000;
+
     //number of Monte Carlo trials in thermalAverage; not currently in use
     public static final long MC = 5000;
 
@@ -26,7 +32,50 @@ public class Main {
      * @param args
      */
     public static void main(String args[]) {
+        // the below code scans a file for resistance mutation scores
+        // <editor-fold defaultstate="collapsed" desc="Scan File">
+        Scanner fileScanner;
+        try {
+            fileScanner = new Scanner(new File("nrti.txt"));
+        } catch (FileNotFoundException e) {
+            System.out.println(e.toString());
+            return;
+        }
+        // </editor-fold>
         
+        // the below code processes the scanner made above to create a list of resistance mutations
+        // <editor-fold defaultstate="collapsed" desc="Make Resistance Mutation Database">
+        ArrayList<ResistanceMutations> scores = new ArrayList<>();
+        while (fileScanner.hasNext()) {
+            int position = Integer.parseInt(fileScanner.nextLine());
+            char cons = fileScanner.nextLine().charAt(0);
+            char aa = fileScanner.nextLine().charAt(0);
+            byte threetc = Byte.parseByte(fileScanner.nextLine());
+            byte ftc = Byte.parseByte(fileScanner.nextLine());
+            byte abc = Byte.parseByte(fileScanner.nextLine());
+            byte azt = Byte.parseByte(fileScanner.nextLine());
+            byte d4t = Byte.parseByte(fileScanner.nextLine());
+            byte ddi = Byte.parseByte(fileScanner.nextLine());
+            byte tdf = Byte.parseByte(fileScanner.nextLine());
+            if (aa=='i' || aa=='d') continue;
+            scores.add(new ResistanceMutations(position, cons, aa, threetc, ftc, abc, azt, d4t, ddi, tdf));
+        }
+        // </editor-fold>
+        
+        System.out.println("pos\tcons\taa\t3tc\tftc\tabc\tazt\td4t\tddi\ttdf");
+        for (ResistanceMutations rm : scores) {
+            System.out.println(rm);
+        }
+    }
+    
+    /**
+     * Constant Generation.
+     * 
+     * This function does all legwork for constant generation, running necessary
+     * functions and scanning necessary files.
+     * @param args Array from main() because args[0] should be file to save constants.
+     */
+    public static void constantGeneration(String args[]) {
         // the below code scans a file for an MSA in FASTA format
         // <editor-fold defaultstate="collapsed" desc="Scan File">
         Scanner fileScanner;
@@ -37,7 +86,7 @@ public class Main {
             return;
         }
         // </editor-fold>
-        
+
         // the below code processes the scanner made above to create an MSA (multiple sequence alignment)
         // <editor-fold defaultstate="collapsed" desc="Create MSA">
         ArrayList<String> names = new ArrayList<>();
@@ -51,7 +100,7 @@ public class Main {
             bitAlignments.add(proteinToBitString(consensus, s));
         });
         // </editor-fold>
-        
+
         // the below code creates Hamiltonian Constants h_i and J_ij
         // <editor-fold defaultstate="collapsed" desc="Generate Hamiltonian Constants">
         double h[] = new double[consensus.length()];
@@ -65,12 +114,36 @@ public class Main {
         HamiltonianConstants hc = boltzmannLearn(singleProbs, doubleProbs, consensus.length(), h, J);
         // </editor-fold>
 
-        //the below code evaluates the Hamiltonian for each input sequence
+        // the below code evaluates the Hamiltonian for each input sequence
+        //<editor-fold defaultstate="collapsed" desc="Print Hamiltonians">
         for (int i = 0; i < bitAlignments.size(); i++) {
             System.out.println(names.get(i) + ": " + evaluateHamiltonian(bitAlignments.get(i), hc.getH(), hc.getJ()));
         }
-        
+        //</editor-fold>
+
         System.out.println("TIME: " + (long) (System.currentTimeMillis() - timer));
+
+        // the below code saves the Hamiltonian constants to a ".hiv" file
+        //<editor-fold defaultstate="collapsed" desc="Save Hamiltonian Constants">
+        FileOutputStream f_out = null;
+        try {
+            f_out = new FileOutputStream(args[0] + ".hiv");
+        } catch (ArrayIndexOutOfBoundsException ex) {
+            try {
+                f_out = new FileOutputStream(System.currentTimeMillis() + ".hiv");
+            } catch (FileNotFoundException ex1) {
+                Logger.getLogger(Main.class.getName()).log(Level.SEVERE, null, ex1);
+            }
+        } catch (FileNotFoundException ex) {
+            Logger.getLogger(Main.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        try {
+            ObjectOutputStream obj_out = new ObjectOutputStream(f_out);
+            obj_out.writeObject(hc);
+        } catch (IOException ex) {
+            Logger.getLogger(Main.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        //</editor-fold>
     }
 
     /**
@@ -81,6 +154,8 @@ public class Main {
      *
      * @param scan Scanner object defining the input stream to use (usually from
      * a file)
+     * @param names Empty ArrayList to which the function will add the names of
+     * each sequence (as directed by FASTA)
      * @return ArrayList<String> containing each sequence from the MSA in order
      */
     public static ArrayList<String> processMSA(Scanner scan, ArrayList<String> names) {
@@ -186,7 +261,7 @@ public class Main {
     /**
      * This class encapsulates the Hamiltonian constant vectors h and J.
      */
-    public static class HamiltonianConstants {
+    public static class HamiltonianConstants implements Serializable {
 
         private final double[] h;
         private final double[][] J;
@@ -204,6 +279,80 @@ public class Main {
             return J;
         }
     }
+    
+    /**
+     * This class encapsulates the Resistance mutation scores from the Stanford HIV Drug Resistance Database
+     */
+    public static class ResistanceMutations {
+        private final int position;
+        private final char cons;
+        private final char aa;
+        private final byte threetc;
+        private final byte ftc;
+        private final byte abc;
+        private final byte azt;
+        private final byte d4t;
+        private final byte ddi;
+        private final byte tdf;
+        
+        public ResistanceMutations (int position, char cons, char aa, byte threetc, byte ftc, byte abc, byte azt, byte d4t, byte ddi, byte tdf) {
+            this.position = position;
+            this.cons = cons;
+            this.aa = aa;
+            this.threetc = threetc;
+            this.ftc = ftc;
+            this.abc = abc;
+            this.azt = azt;
+            this.d4t = d4t;
+            this.ddi = ddi;
+            this.tdf = tdf;
+        }
+        
+        public int getPosition() {
+            return position;
+        }
+        
+        public char getCons() {
+            return cons;
+        }
+        
+        public char getAA() {
+            return aa;
+        }
+        
+        public byte get3tc() {
+            return threetc;
+        }
+        
+        public int getFTC() {
+            return position;
+        }
+        
+        public int getABC() {
+            return abc;
+        }
+        
+        public int getAZT() {
+            return azt;
+        }
+        
+        public int getD4T() {
+            return d4t;
+        }
+        
+        public int getDDI() {
+            return ddi;
+        }
+        
+        public int getTDF() {
+            return tdf;
+        }
+        
+        @Override
+        public String toString() {
+            return position+"\t"+cons+"\t"+aa+"\t"+threetc+"\t"+ftc+"\t"+abc+"\t"+azt+"\t"+d4t+"\t"+ddi+"\t"+tdf;
+        }
+    }
 
     /**
      * Boltzmann Learning function.
@@ -215,7 +364,7 @@ public class Main {
      * @param singleProbs Observed mutational probabilities at each locus
      * @param doubleProbs Observed double mutational probabilities at each pair
      * of loci
-     * @param length    length of protein
+     * @param length length of protein
      * @param h Initial value for h, the constant vector
      * @param J Initial value for J, the constant vector
      * @return HamiltonianConstants object containing corrected constant values
@@ -227,7 +376,7 @@ public class Main {
         System.out.println("Entering the Boltzmann loop");
         while (count++ < BOLTZ) {
             for (int i = 0; i < length; i++) {
-                delta_h[i] = ETA * (singleProbs[i] - MMC(i,length,h,J));
+                delta_h[i] = ETA * (singleProbs[i] - MMC(i, length, h, J));
             }
             for (int i = 0; i < h.length; i++) {
                 h[i] += delta_h[i];
@@ -246,10 +395,10 @@ public class Main {
      * computationally intensive, so we instead take a Monte Carlo sample of the
      * possible sequences (20,000 trials) and take that average instead. This
      * sacrifices accuracy but gains efficiency.
-     * 
+     *
      * Thermal averaging of one position is not currently in use, replaced by
-     * MMC (Metropolis Monte Carlo). That function does essentially the same thing,
-     * except that it should be computationally much faster than the
+     * MMC (Metropolis Monte Carlo). That function does essentially the same
+     * thing, except that it should be computationally much faster than the
      * thermal average function with equal or greater accuracy.
      *
      * @param position position of amino acid that is mutated
@@ -282,7 +431,7 @@ public class Main {
      * computationally intensive, so we instead take a Monte Carlo sample of the
      * possible sequences (20,000 trials) and take that average instead. This
      * sacrifices accuracy but gains efficiency.
-     * 
+     *
      * Thermal averaging of two positions is not currently in use because we can
      * estimate J with reasonable accuracy in a different way.
      *
@@ -329,7 +478,8 @@ public class Main {
     }
 
     /**
-     * Calculates double mutational probabilities by averaging them over the MSA.
+     * Calculates double mutational probabilities by averaging them over the
+     * MSA.
      *
      * @param msa Bytestring MSA
      * @param length length of each
@@ -354,16 +504,16 @@ public class Main {
 
     /**
      * Estimates J using the Independent-Pair Approximation.
-     * 
-     * This is an estimation of the J constants (not great accuracy but decent
-     * for my purposes) from Roudi et. al. 2009. Added this because using Boltzmann
-     * learning to calculate J is extremely computationally intensive and this
-     * has (apparently) a decent level of accuracy.
      *
-     * @param singleMutations   Single mutational probabilities vector
-     * @param doubleMutations   Double mutational probabilities matrix
-     * @param length            Length of protein
-     * @return                  Matrix of all J_ij where j > i
+     * This is an estimation of the J constants (not great accuracy but decent
+     * for my purposes) from Roudi et. al. 2009. Added this because using
+     * Boltzmann learning to calculate J is extremely computationally intensive
+     * and this has (apparently) a decent level of accuracy.
+     *
+     * @param singleMutations Single mutational probabilities vector
+     * @param doubleMutations Double mutational probabilities matrix
+     * @param length Length of protein
+     * @return Matrix of all J_ij where j > i
      */
     public static double[][] estimateJ(double[] singleMutations, double[][] doubleMutations, int length) {
         double[][] J = new double[length][length];
@@ -379,24 +529,25 @@ public class Main {
 
     /**
      * MMC (Metropolis Monte Carlo) Function.
-     * 
-     * Follows basic sampling procedures found in the Supplementary Methods of 
-     * Ferguson et. al. This is essentially the same as the thermal average function,
-     * but instead of generating random sequences each time, it "steps" through
-     * all possible states (as in a Markov Chain) and records the CHANGE in energy
-     * each time. That way, evaluateHamiltonian() is only called once. Then we
-     * just record every MC_RATE state and average.
-     * 
-     * This used to be done differently, rejecting based on whether or not it increased
-     * the energy. I used this algorithm from Beichl and Sullivan, 2000. However,
-     * this was a mistake to use because it is useful for finding a local minimum
-     * of maximum but not for taking a straight average.
-     * 
-     * @param position  position of amino acid that is mutated
-     * @param length    length of protein
-     * @param h         current h vector
-     * @param J         current J matrix
-     * @return          double representing the thermal average over the Ising distribution
+     *
+     * Follows basic sampling procedures found in the Supplementary Methods of
+     * Ferguson et. al. This is essentially the same as the thermal average
+     * function, but instead of generating random sequences each time, it
+     * "steps" through all possible states (as in a Markov Chain) and records
+     * the CHANGE in energy each time. That way, evaluateHamiltonian() is only
+     * called once. Then we just record every MC_RATE state and average.
+     *
+     * This used to be done differently, rejecting based on whether or not it
+     * increased the energy. I used this algorithm from Beichl and Sullivan,
+     * 2000. However, this was a mistake to use because it is useful for finding
+     * a local minimum of maximum but not for taking a straight average.
+     *
+     * @param position position of amino acid that is mutated
+     * @param length length of protein
+     * @param h current h vector
+     * @param J current J matrix
+     * @return double representing the thermal average over the Ising
+     * distribution
      */
     public static double MMC(int position, int length, double[] h, double[][] J) {
         Random rand = new Random();
@@ -420,45 +571,47 @@ public class Main {
             } else {
                 sigma[toChange] = 1;
             }
-            
+
             E += calculateDeltaE(toChange, length, h, J, sigma);
-            if (count%MC_RATE == 0) sum+=E;
+            if (count % MC_RATE == 0) {
+                sum += E;
+            }
             count++;
         }
-        return sum/((int)(count/MC_RATE));
+        return sum / ((int) (count / MC_RATE));
     }
 
     /**
      * Helper method for MMC to calculate the deltaE (change in energy).
-     * 
+     *
      * This essentially allows a much faster sampling because we don't have to
      * go through the entire evaluateHamiltonian() step in order to find the new
      * energy of the system after a single flip in the Monte Carlo MMC().
-     * 
-     * @param change    amino acid that was changed
-     * @param length    length of protein
-     * @param h         h vector of Ising
-     * @param J         J matrix of Ising
-     * @param sigma     Byte Array of protein containing elements from the set {0,1}
-     * @return          delta E of the new state
+     *
+     * @param change amino acid that was changed
+     * @param length length of protein
+     * @param h h vector of Ising
+     * @param J J matrix of Ising
+     * @param sigma Byte Array of protein containing elements from the set {0,1}
+     * @return delta E of the new state
      */
     private static double calculateDeltaE(int change, int length, double[] h, double[][] J, Byte[] sigma) {
         double delta_E = 0.0;
         if (change == 0) { //this means that it has been changed to a 0 from a 1
             delta_E -= h[change]; //sigma[change]*h[change] used to be in E, but it is no longer
             for (int j = change + 1; j < length; j++) { //sigma[j]*sigma[change]*J[change][j] is no longer in E
-                delta_E -= J[change][j]*sigma[j];
+                delta_E -= J[change][j] * sigma[j];
             }
             for (int i = 0; i < change; i++) { //sigma[i]*sigma[change]*J[i][change] is no longer in E
-                delta_E -= J[i][change]*sigma[i];
+                delta_E -= J[i][change] * sigma[i];
             }
         } else { //this means that is has been changed to a 1 from a 0
             delta_E += h[change]; //we now include h[change]*sigma[change]
             for (int j = change + 1; j < length; j++) { //sigma[j]*sigma[change]*J[change][j] is added
-                delta_E += J[change][j]*sigma[j];
+                delta_E += J[change][j] * sigma[j];
             }
             for (int i = 0; i < change; i++) { //sigma[i]*sigma[change]*J[i][change] is added
-                delta_E += J[i][change]*sigma[i];
+                delta_E += J[i][change] * sigma[i];
             }
         }
         return delta_E;
