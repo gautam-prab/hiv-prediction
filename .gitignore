@@ -1,0 +1,6 @@
+# Ignore these File Types #
+*.zip
+*.jar
+*.DS_Store
+*.DS_Store?
+*.class
