@@ -1,8 +1,10 @@
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -18,13 +20,16 @@ public class Main {
     //learning rate for Boltzmann learning
     public static final double ETA = .05;
     //number of steps in walking for MMC
-    public static final long MC_WALK = 10000; //100000;
+    public static final long MC_WALK = 100000;
     //number of rejections per sample for MMC
     public static final long MC_RATE = 1000;
-
     //number of Monte Carlo trials in thermalAverage; not currently in use
     public static final long MC = 5000;
+    //number of Monte Carlo trials in partition
+    public static final long MC_PARTITION = 134217728;
 
+    //value by which I have to multiply the score in order to convert to energy
+    public static double score_multiplier;
 
     /**
      * main function
@@ -32,45 +37,77 @@ public class Main {
      * @param args
      */
     public static void main(String args[]) {
-        // the below code scans a file for resistance mutation scores
+        // // the below code scans a file for resistance mutation scores
+        // // <editor-fold defaultstate="collapsed" desc="Scan File">
+        // Scanner fileScanner;
+        // try {
+        //     fileScanner = new Scanner(new File("nrti.txt"));
+        // } catch (FileNotFoundException e) {
+        //     System.out.println(e.toString());
+        //     return;
+        // }
+        // // </editor-fold>
+        //
+        // // the below code processes the scanner made above to create a list of resistance mutations
+        // // <editor-fold defaultstate="collapsed" desc="Make Resistance Mutation Database">
+        // ArrayList<ResistanceMutations> scores = new ArrayList<>();
+        // while (fileScanner.hasNext()) {
+        //     int position = Integer.parseInt(fileScanner.nextLine());
+        //     char cons = fileScanner.nextLine().charAt(0);
+        //     char aa = fileScanner.nextLine().charAt(0);
+        //     byte threetc = Byte.parseByte(fileScanner.nextLine());
+        //     byte ftc = Byte.parseByte(fileScanner.nextLine());
+        //     byte abc = Byte.parseByte(fileScanner.nextLine());
+        //     byte azt = Byte.parseByte(fileScanner.nextLine());
+        //     byte d4t = Byte.parseByte(fileScanner.nextLine());
+        //     byte ddi = Byte.parseByte(fileScanner.nextLine());
+        //     byte tdf = Byte.parseByte(fileScanner.nextLine());
+        //     if (aa=='i' || aa=='d') continue;
+        //     scores.add(new ResistanceMutations(position, cons, aa, threetc, ftc, abc, azt, d4t, ddi, tdf));
+        // }
+        // // </editor-fold>
+        //
+        // System.out.println("pos\tcons\taa\t3tc\tftc\tabc\tazt\td4t\tddi\ttdf");
+        // for (ResistanceMutations rm : scores) {
+        //     System.out.println(rm);
+        // }
+        // constantGeneration(args);
+
         // <editor-fold defaultstate="collapsed" desc="Scan File">
-        Scanner fileScanner;
-        try {
-            fileScanner = new Scanner(new File("nrti.txt"));
-        } catch (FileNotFoundException e) {
-            System.out.println(e.toString());
-            return;
-        }
+        // Scanner fileScanner;
+        // try {
+        //     fileScanner = new Scanner(new File("hiv-ddi.fasta"));
+        // } catch (FileNotFoundException e) {
+        //     System.out.println(e.toString());
+        //     return;
+        // }
+        // // </editor-fold>
+        //
+        // // the below code processes the scanner made above to create an MSA (multiple sequence alignment)
+        // // <editor-fold defaultstate="collapsed" desc="Create MSA">
+        // ArrayList<String> names = new ArrayList<>();
+        // ArrayList<String> alignments = processMSA(fileScanner, names);
+        // String consensus = "-----------------------------KIKAL-EICTEMEKEGKISKIGPENPYNTPVFAIKKKDSTKWRKLVDFRELNKRTQDFWEVQLGIPHPAGLKKKKSVTVLDVGDAYFSVPLD--FRKYTAFTIPS-NNETPGIRYQYNVLPQGWKGSPAIFQSSMTKILEPFRKQNPDIVIYQY-DDLYVGSDLEIGQHR-KIEELR-HLL-WGFTTPDKKHQKEPPFLWMGYELHPDKWTVQPI-----------------------------------------------------------------------------------------";
+        // System.out.println("MSA SIZE: " + alignments.size());
+        // System.out.println("CONSENSUS LENGTH: " + consensus.length());
+        // ArrayList<Byte[]> bitAlignments = new ArrayList<>();
+        // alignments.stream().forEach((s) -> {
+        //     System.out.println(s);
+        //     bitAlignments.add(proteinToBitString(consensus, s));
+        // });
         // </editor-fold>
-        
-        // the below code processes the scanner made above to create a list of resistance mutations
-        // <editor-fold defaultstate="collapsed" desc="Make Resistance Mutation Database">
-        ArrayList<ResistanceMutations> scores = new ArrayList<>();
-        while (fileScanner.hasNext()) {
-            int position = Integer.parseInt(fileScanner.nextLine());
-            char cons = fileScanner.nextLine().charAt(0);
-            char aa = fileScanner.nextLine().charAt(0);
-            byte threetc = Byte.parseByte(fileScanner.nextLine());
-            byte ftc = Byte.parseByte(fileScanner.nextLine());
-            byte abc = Byte.parseByte(fileScanner.nextLine());
-            byte azt = Byte.parseByte(fileScanner.nextLine());
-            byte d4t = Byte.parseByte(fileScanner.nextLine());
-            byte ddi = Byte.parseByte(fileScanner.nextLine());
-            byte tdf = Byte.parseByte(fileScanner.nextLine());
-            if (aa=='i' || aa=='d') continue;
-            scores.add(new ResistanceMutations(position, cons, aa, threetc, ftc, abc, azt, d4t, ddi, tdf));
-        }
-        // </editor-fold>
-        
-        System.out.println("pos\tcons\taa\t3tc\tftc\tabc\tazt\td4t\tddi\ttdf");
-        for (ResistanceMutations rm : scores) {
-            System.out.println(rm);
-        }
+        // constantGeneration(args);
+        // HamiltonianConstants hivUntreated = readConstants("hiv-untreated.hiv");
+        // HamiltonianConstants hivTreated = readConstants("hiv-treated.hiv");
+        //
+        // for (int i = 0; i < bitAlignments.size(); i++) {
+        //     System.out.println(names.get(i) + "\t" + evaluateHamiltonian(bitAlignments.get(i), hivUntreated.getH(), hivUntreated.getJ()) + "\t" + evaluateHamiltonian(bitAlignments.get(i), hivTreated.getH(), hivTreated.getJ()));
+        // }
     }
-    
+
     /**
      * Constant Generation.
-     * 
+     *
      * This function does all legwork for constant generation, running necessary
      * functions and scanning necessary files.
      * @param args Array from main() because args[0] should be file to save constants.
@@ -80,7 +117,7 @@ public class Main {
         // <editor-fold defaultstate="collapsed" desc="Scan File">
         Scanner fileScanner;
         try {
-            fileScanner = new Scanner(new File("cameroonp7.fasta"));
+            fileScanner = new Scanner(new File("hiv-ddi-full.fasta"));
         } catch (FileNotFoundException e) {
             System.out.println(e.toString());
             return;
@@ -91,7 +128,7 @@ public class Main {
         // <editor-fold defaultstate="collapsed" desc="Create MSA">
         ArrayList<String> names = new ArrayList<>();
         ArrayList<String> alignments = processMSA(fileScanner, names);
-        String consensus = "----------------------------------------------------AGPIPPGQMREPRGSDIAGTTSTLQEQIGWMTSNPPIPVGEIYKRWIILGLNKIVRMYSPVSILDIRQGPKEPFRDYVDRFFKTLRAEQATQEVKNWMTETLLVQNANPDCKSILRALGPGATLEEMMTACQGVGGPGHKARVLAEAMS--QV-Q--QANIMMQRGNFRGQRT-IKCFNCGKEGHLARNCKAPRKKGCWKCGKEGHQMKDCTERQANFLG-";
+        String consensus = "PISPIETVPVKLKPGMDGPKVKQWPLTEEKIKALVEICTEMEKEGKISKIGPENPYNTPVFAIKKKDSTKWRKLVDFRELNKRTQDFWEVQLGIPHPAGLKKKKSVTVLDVGDAYFSVPLDKDFRKYTAFTIPSINNETPGIRYQYNVLPQGWKGSPAIFQSSMTKILEPFRKQNPDIVIYQYMDDLYVGSDLEIGQHRTKIEELRQHLLKWGFTTPDKKHQKEPPFLWMGYELHPDKWTVQPIVLPEKDSWTVNDIQKLVGKLNWASQIYAGIKVKQLCKLLRGTKALTEVVPLTEEAELELAENREILKEPVHGVYYDP-KD---------";
         System.out.println("MSA SIZE: " + alignments.size());
         System.out.println("CONSENSUS LENGTH: " + consensus.length());
         ArrayList<Byte[]> bitAlignments = new ArrayList<>();
@@ -144,6 +181,31 @@ public class Main {
             Logger.getLogger(Main.class.getName()).log(Level.SEVERE, null, ex);
         }
         //</editor-fold>
+    }
+
+    /**
+     * Reading Hamiltonian Constants from a file.
+     *
+     * @param path  Path of file to read (should be in code-saved .hiv format)
+     * @return      HamiltonianConstants object if read or null if failed
+     */
+    public static HamiltonianConstants readConstants (String path) {
+        FileInputStream f_in = null;
+        HamiltonianConstants toReturn = null;
+        try {
+            f_in = new FileInputStream(path);
+        } catch (FileNotFoundException ex) {
+            Logger.getLogger(Main.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        try {
+            ObjectInputStream obj_in = new ObjectInputStream(f_in);
+            toReturn = (HamiltonianConstants) obj_in.readObject();
+        } catch (IOException ex) {
+            Logger.getLogger(Main.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (ClassNotFoundException ex) {
+            Logger.getLogger(Main.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        return toReturn;
     }
 
     /**
@@ -279,7 +341,7 @@ public class Main {
             return J;
         }
     }
-    
+
     /**
      * This class encapsulates the Resistance mutation scores from the Stanford HIV Drug Resistance Database
      */
@@ -294,7 +356,7 @@ public class Main {
         private final byte d4t;
         private final byte ddi;
         private final byte tdf;
-        
+
         public ResistanceMutations (int position, char cons, char aa, byte threetc, byte ftc, byte abc, byte azt, byte d4t, byte ddi, byte tdf) {
             this.position = position;
             this.cons = cons;
@@ -307,47 +369,47 @@ public class Main {
             this.ddi = ddi;
             this.tdf = tdf;
         }
-        
+
         public int getPosition() {
             return position;
         }
-        
+
         public char getCons() {
             return cons;
         }
-        
+
         public char getAA() {
             return aa;
         }
-        
-        public byte get3tc() {
+
+        public byte get3TC() {
             return threetc;
         }
-        
+
         public int getFTC() {
             return position;
         }
-        
+
         public int getABC() {
             return abc;
         }
-        
+
         public int getAZT() {
             return azt;
         }
-        
+
         public int getD4T() {
             return d4t;
         }
-        
+
         public int getDDI() {
             return ddi;
         }
-        
+
         public int getTDF() {
             return tdf;
         }
-        
+
         @Override
         public String toString() {
             return position+"\t"+cons+"\t"+aa+"\t"+threetc+"\t"+ftc+"\t"+abc+"\t"+azt+"\t"+d4t+"\t"+ddi+"\t"+tdf;
@@ -387,7 +449,7 @@ public class Main {
     }
 
     /**
-     * Thermal Averaging function (one position).
+     * Thermal Averaging function (one position). Deprecated.
      *
      * Finds the average over the Ising distribution of a position. This finds,
      * essentially, a weighted sum of all possible sequences in the Hamiltonian
@@ -423,7 +485,7 @@ public class Main {
     }
 
     /**
-     * Thermal Averaging function (two positions).
+     * Thermal Averaging function (two positions). Deprecated.
      *
      * Finds the average over the Ising distribution of a position. This finds,
      * essentially, a weighted sum of all possible sequences in the Hamiltonian
@@ -615,5 +677,29 @@ public class Main {
             }
         }
         return delta_E;
+    }
+
+    /**
+     * Partition Function.
+     *
+     * Finds the partition function as an average over the Ising distribution times
+     * the number of amino acids in the distribution. Takes MC_PARTITION totally
+     * random samples (no MC-walk for now).
+     */
+    public static Double partition(int length, double[] h, double[][] J) {
+        double sum = 0;
+        Random r = new Random();
+        for (int i = 0; i < MC_PARTITION; i++) {
+            Byte[] rand = new Byte[length];
+            for (int j = 0; j < length; j++) {
+                rand[j] = r.nextBoolean() ? new Byte((byte) 1) : new Byte((byte) 0);
+            }
+            sum += Math.exp(-evaluateHamiltonian(rand, h, J));
+            if (i%10000==0) {
+                System.out.println(i+" out of "+MC_PARTITION);
+            }
+        }
+
+        return new Double(sum / MC * Math.pow(2,length));
     }
 }
