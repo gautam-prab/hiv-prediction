@@ -103,6 +103,12 @@ public class Main {
         // for (int i = 0; i < bitAlignments.size(); i++) {
         //     System.out.println(names.get(i) + "\t" + evaluateHamiltonian(bitAlignments.get(i), hivUntreated.getH(), hivUntreated.getJ()) + "\t" + evaluateHamiltonian(bitAlignments.get(i), hivTreated.getH(), hivTreated.getJ()));
         // }
+        // constantGeneration(args);
+
+        HamiltonianConstants hc_treated = readConstants("hiv-treated.hiv");
+        HamiltonianConstants hc_untreated = readConstants("hiv-untreated.hiv");
+
+        
     }
 
     /**
@@ -117,7 +123,7 @@ public class Main {
         // <editor-fold defaultstate="collapsed" desc="Scan File">
         Scanner fileScanner;
         try {
-            fileScanner = new Scanner(new File("hiv-ddi-full.fasta"));
+            fileScanner = new Scanner(new File("hiv-untreated_subalign.fasta"));
         } catch (FileNotFoundException e) {
             System.out.println(e.toString());
             return;
@@ -128,7 +134,7 @@ public class Main {
         // <editor-fold defaultstate="collapsed" desc="Create MSA">
         ArrayList<String> names = new ArrayList<>();
         ArrayList<String> alignments = processMSA(fileScanner, names);
-        String consensus = "PISPIETVPVKLKPGMDGPKVKQWPLTEEKIKALVEICTEMEKEGKISKIGPENPYNTPVFAIKKKDSTKWRKLVDFRELNKRTQDFWEVQLGIPHPAGLKKKKSVTVLDVGDAYFSVPLDKDFRKYTAFTIPSINNETPGIRYQYNVLPQGWKGSPAIFQSSMTKILEPFRKQNPDIVIYQYMDDLYVGSDLEIGQHRTKIEELRQHLLKWGFTTPDKKHQKEPPFLWMGYELHPDKWTVQPIVLPEKDSWTVNDIQKLVGKLNWASQIYAGIKVKQLCKLLRGTKALTEVVPLTEEAELELAENREILKEPVHGVYYDP-KD---------";
+        String consensus = "-----------------------------KIKAL-EICTEMEKEGKISKIGPENPYNTPVFAIKKKDSTKWRKLVDFRELNKRTQDFWEVQLGIPHPAGLKKKKSVTVLDVGDAYFSVPLD--FRKYTAFTIPS-NNETPGIRYQYNVLPQGWKGSPAIFQSSMTKILEPFRKQNPDIVIYQY-DDLYVGSDLEIGQHR-KIEELR-HLL-WGFTTPDKKHQKEPPFLWMGYELHPDKWTVQPI----------------------------------------------------------------------------------------------------------------------------------------------------------------------";
         System.out.println("MSA SIZE: " + alignments.size());
         System.out.println("CONSENSUS LENGTH: " + consensus.length());
         ArrayList<Byte[]> bitAlignments = new ArrayList<>();
