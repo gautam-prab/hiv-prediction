@@ -14,6 +14,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.awt.Color;
 import java.awt.BasicStroke;
+import java.math.BigDecimal;
 import org.jfree.chart.ChartPanel;
 import org.jfree.chart.JFreeChart;
 import org.jfree.data.xy.XYDataset;
@@ -25,6 +26,8 @@ import org.jfree.chart.ChartFactory;
 import org.jfree.chart.plot.PlotOrientation;
 import org.jfree.data.xy.XYSeriesCollection;
 import org.jfree.chart.renderer.xy.XYLineAndShapeRenderer;
+import org.apfloat.Apfloat;
+import org.apfloat.ApfloatMath;
 
 public class Main {
 
@@ -39,7 +42,7 @@ public class Main {
     //number of Monte Carlo trials in thermalAverage; not currently in use
     public static final long MC = 5000;
     //number of Monte Carlo trials in partition
-    public static final long MC_PARTITION = 134217728;
+    public static final long MC_PARTITION = 1000;
 
     //value by which I have to multiply the score in order to convert to energy
     public static double score_multiplier;
@@ -88,38 +91,51 @@ public class Main {
 
         HamiltonianConstants hivUntreated = readConstants("mainpackage/hiv-untreated.hiv");
         HamiltonianConstants hivTreated = readConstants("mainpackage/hiv-treated.hiv");
-        HamiltonianConstants hivDDI = readConstants("mainpackage/hiv-ddi.hiv");
-        
+//        HamiltonianConstants hivDDI = readConstants("mainpackage/hiv-ddi.hiv");
+
         Byte[] bitString = new Byte[333];
         for (int i = 0; i < 333; i++) {
             bitString[i] = new Byte((byte) 0);
         }
 
+//        double utPartition = partition(333, hivUntreated.getH(), hivUntreated.getJ());
+//        double tPartition = partition(333, hivTreated.getH(), hivTreated.getJ());
+
+//        System.out.println("COMPLETED UT PARTITION = "+utPartition);
+//        System.out.println("COMPLETED T PARTITION = "+tPartition);
+//        
+//        System.out.println("Likelihood of WT under UT"+evaluateHamiltonian(bitString, hivUntreated.getH(), hivUntreated.getJ()) / utPartition);
+//        System.out.println("Likelihood of WT under T"+evaluateHamiltonian(bitString, hivTreated.getH(), hivTreated.getJ()) / tPartition);
+
         XYSeries untreated = new XYSeries("Untreated Data");
         XYSeries treated = new XYSeries("Treated Data");
-        XYSeries ddi = new XYSeries("DDI Data");
-        XYSeries difference = new XYSeries("Untreated - Treated");
-        double avg = 0;
+//        XYSeries ddi = new XYSeries("DDI Data");
+//        XYSeries difference = new XYSeries("Untreated - Treated");
         for (int i = 0; i < 333; i++) {
             bitString[i] = 1;
-            double ut = evaluateHamiltonian(bitString, hivUntreated.getH(), hivUntreated.getJ());
-            double t = evaluateHamiltonian(bitString, hivTreated.getH(), hivTreated.getJ());
-            untreated.add(i, ut);
-            treated.add(i, t);
-            ddi.add(i, evaluateHamiltonian(bitString, hivDDI.getH(), hivDDI.getJ()));
-            difference.add(i, ut-t);
-            avg += (ut-t);
+            for (int j = 0; j < 333; j++) {
+                if (j <= i) {
+                    System.out.print("\t");
+                     continue;
+                }
+                bitString[j] = 1;
+                double ut = Math.exp(-1 * evaluateHamiltonian(bitString, hivUntreated.getH(), hivUntreated.getJ()) / (1e36));
+                untreated.add(i, ut);
+                double t = Math.exp(-1 * evaluateHamiltonian(bitString, hivTreated.getH(), hivTreated.getJ()) / (1e36));
+                treated.add(i, t);
+                bitString[j] = 0;
+                System.out.print(((double)t - ut)+"\t");
+            }
             bitString[i] = 0;
+            System.out.println("");
         }
-        avg /= 333;
-        System.out.println("average difference = "+avg);
 
         XYSeriesCollection dataset = new XYSeriesCollection();
         dataset.addSeries(untreated);
         dataset.addSeries(treated);
-        dataset.addSeries(difference);
-        dataset.addSeries(ddi);
-        
+//        dataset.addSeries(difference);
+//        dataset.addSeries(ddi);
+
         XYLineChart_AWT chart = new XYLineChart_AWT("HIV Prediction", "Amino Acid vs Energy", dataset);
         chart.pack();
         RefineryUtilities.centerFrameOnScreen(chart);
@@ -703,6 +719,35 @@ public class Main {
         }
         return delta_E;
     }
+
+    /**
+     * Partition Function.
+     *
+     * Finds the partition function as an average over the Ising distribution
+     * times the number of amino acids in the distribution. Takes MC_PARTITION
+     * totally random samples (no MC-walk for now).
+     */
+    public static Double partition(int length, double[] h, double[][] J) {
+        Apfloat sum = new Apfloat("0", 100000);
+        Random r = new Random();
+        for (int i = 0; i < MC_PARTITION; i++) {
+            Byte[] rand = new Byte[length];
+            for (int j = 0; j < length; j++) {
+                rand[j] = r.nextBoolean() ? new Byte((byte) 1) : new Byte((byte) 0);
+            }
+            Apfloat hamiltonian = new Apfloat(evaluateHamiltonian(rand, h, J), 100000);
+            sum = sum.add(ApfloatMath.exp(hamiltonian.negate().divide(new Apfloat("1E36"))));
+            if (i % 100000 == 0) {
+                System.out.println("sum = " + sum);
+                System.out.println(i + " out of " + MC_PARTITION);
+            }
+        }
+        System.out.println("PARTITION SUM IS " + sum.doubleValue() / MC_PARTITION * Math.pow(2, length));
+        return new Double(sum.doubleValue() / MC_PARTITION * Math.pow(2, length));
+    }
+
+
+
 }
 
 class XYLineChart_AWT extends ApplicationFrame {
