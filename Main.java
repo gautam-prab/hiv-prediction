@@ -16,7 +16,7 @@ import java.util.logging.Logger;
 public class Main {
 
     //number of Boltzmann learning steps
-    public static final long BOLTZ = 10;
+    public static final long BOLTZ = 100;
     //learning rate for Boltzmann learning
     public static final double ETA = .05;
     //number of steps in walking for MMC
@@ -103,12 +103,12 @@ public class Main {
         // for (int i = 0; i < bitAlignments.size(); i++) {
         //     System.out.println(names.get(i) + "\t" + evaluateHamiltonian(bitAlignments.get(i), hivUntreated.getH(), hivUntreated.getJ()) + "\t" + evaluateHamiltonian(bitAlignments.get(i), hivTreated.getH(), hivTreated.getJ()));
         // }
-        // constantGeneration(args);
+        constantGeneration(args);
 
-        HamiltonianConstants hc_treated = readConstants("hiv-treated.hiv");
-        HamiltonianConstants hc_untreated = readConstants("hiv-untreated.hiv");
+        // HamiltonianConstants hc_treated = readConstants("hiv-treated.hiv");
+        // HamiltonianConstants hc_untreated = readConstants("hiv-untreated.hiv");
 
-        
+
     }
 
     /**
