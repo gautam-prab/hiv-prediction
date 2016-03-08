@@ -18,15 +18,15 @@ public class Main {
     //number of Boltzmann learning steps
     public static final long BOLTZ = 100;
     //learning rate for Boltzmann learning
-    public static final double ETA = .05;
+    public static final double ETA = 2;
     //number of steps in walking for MMC
-    public static final long MC_WALK = 100000;
+    public static final long MC_WALK = 10000;
     //number of rejections per sample for MMC
-    public static final long MC_RATE = 1000;
+    public static final long MC_RATE = 500;
     //number of Monte Carlo trials in thermalAverage; not currently in use
-    public static final long MC = 5000;
+    public static final long MC = 10000;
     //number of Monte Carlo trials in partition
-    public static final long MC_PARTITION = 134217728;
+    public static final long MC_PARTITION = 100000; //134217728;
 
     //value by which I have to multiply the score in order to convert to energy
     public static double score_multiplier;
@@ -103,7 +103,8 @@ public class Main {
         // for (int i = 0; i < bitAlignments.size(); i++) {
         //     System.out.println(names.get(i) + "\t" + evaluateHamiltonian(bitAlignments.get(i), hivUntreated.getH(), hivUntreated.getJ()) + "\t" + evaluateHamiltonian(bitAlignments.get(i), hivTreated.getH(), hivTreated.getJ()));
         // }
-        constantGeneration(args);
+        constantGeneration(new String[]{"hiv-untreated-FINAL.hiv"}, "hiv-untreated_subalign.fasta");
+        constantGeneration(new String[]{"hiv-treated-FINAL.hiv"}, "hiv-rt-treated_subalign.fasta");
 
         // HamiltonianConstants hc_treated = readConstants("hiv-treated.hiv");
         // HamiltonianConstants hc_untreated = readConstants("hiv-untreated.hiv");
@@ -118,12 +119,12 @@ public class Main {
      * functions and scanning necessary files.
      * @param args Array from main() because args[0] should be file to save constants.
      */
-    public static void constantGeneration(String args[]) {
+    public static void constantGeneration(String args[], String inputFile) {
         // the below code scans a file for an MSA in FASTA format
         // <editor-fold defaultstate="collapsed" desc="Scan File">
         Scanner fileScanner;
         try {
-            fileScanner = new Scanner(new File("hiv-untreated_subalign.fasta"));
+            fileScanner = new Scanner(new File(inputFile));
         } catch (FileNotFoundException e) {
             System.out.println(e.toString());
             return;
@@ -136,6 +137,7 @@ public class Main {
         ArrayList<String> alignments = processMSA(fileScanner, names);
         String consensus = "-----------------------------KIKAL-EICTEMEKEGKISKIGPENPYNTPVFAIKKKDSTKWRKLVDFRELNKRTQDFWEVQLGIPHPAGLKKKKSVTVLDVGDAYFSVPLD--FRKYTAFTIPS-NNETPGIRYQYNVLPQGWKGSPAIFQSSMTKILEPFRKQNPDIVIYQY-DDLYVGSDLEIGQHR-KIEELR-HLL-WGFTTPDKKHQKEPPFLWMGYELHPDKWTVQPI----------------------------------------------------------------------------------------------------------------------------------------------------------------------";
         System.out.println("MSA SIZE: " + alignments.size());
+        System.out.println("ALIGNMENT LENGTH: " + alignments.get(0).length());
         System.out.println("CONSENSUS LENGTH: " + consensus.length());
         ArrayList<Byte[]> bitAlignments = new ArrayList<>();
         alignments.stream().forEach((s) -> {
@@ -146,14 +148,20 @@ public class Main {
 
         // the below code creates Hamiltonian Constants h_i and J_ij
         // <editor-fold defaultstate="collapsed" desc="Generate Hamiltonian Constants">
+        System.out.println(alignments.get(0).substring(0,1));
         double h[] = new double[consensus.length()];
-        double J[][];
+        double J[][] = new double[consensus.length()][consensus.length()];
+        for (int i = 0; i < J.length; i++) {
+          for (int j = 0; j < J.length; j++) {
+            J[i][j] = 0;
+          }
+        }
         double singleProbs[] = calculateSingleMutationalProbabilities(bitAlignments, consensus.length());
         System.out.println("Done with single probs");
         double doubleProbs[][] = calculateDoubleMutationalProbabilities(bitAlignments, consensus.length());
         System.out.println("Done with double probs");
         long timer = System.currentTimeMillis();
-        J = estimateJ(singleProbs, doubleProbs, consensus.length());
+        // J = estimateJ(singleProbs, doubleProbs, consensus.length());
         HamiltonianConstants hc = boltzmannLearn(singleProbs, doubleProbs, consensus.length(), h, J);
         // </editor-fold>
 
@@ -349,80 +357,6 @@ public class Main {
     }
 
     /**
-     * This class encapsulates the Resistance mutation scores from the Stanford HIV Drug Resistance Database
-     */
-    public static class ResistanceMutations {
-        private final int position;
-        private final char cons;
-        private final char aa;
-        private final byte threetc;
-        private final byte ftc;
-        private final byte abc;
-        private final byte azt;
-        private final byte d4t;
-        private final byte ddi;
-        private final byte tdf;
-
-        public ResistanceMutations (int position, char cons, char aa, byte threetc, byte ftc, byte abc, byte azt, byte d4t, byte ddi, byte tdf) {
-            this.position = position;
-            this.cons = cons;
-            this.aa = aa;
-            this.threetc = threetc;
-            this.ftc = ftc;
-            this.abc = abc;
-            this.azt = azt;
-            this.d4t = d4t;
-            this.ddi = ddi;
-            this.tdf = tdf;
-        }
-
-        public int getPosition() {
-            return position;
-        }
-
-        public char getCons() {
-            return cons;
-        }
-
-        public char getAA() {
-            return aa;
-        }
-
-        public byte get3TC() {
-            return threetc;
-        }
-
-        public int getFTC() {
-            return position;
-        }
-
-        public int getABC() {
-            return abc;
-        }
-
-        public int getAZT() {
-            return azt;
-        }
-
-        public int getD4T() {
-            return d4t;
-        }
-
-        public int getDDI() {
-            return ddi;
-        }
-
-        public int getTDF() {
-            return tdf;
-        }
-
-        @Override
-        public String toString() {
-            return position+"\t"+cons+"\t"+aa+"\t"+threetc+"\t"+ftc+"\t"+abc+"\t"+azt+"\t"+d4t+"\t"+ddi+"\t"+tdf;
-        }
-    }
-
-    /**
      * Boltzmann Learning function.
      *
      * Generates constant vectors h_i and J_ij for an MSA. The process is to run
@@ -443,8 +377,14 @@ public class Main {
         double[][] delta_J = new double[J.length][J[0].length];
         System.out.println("Entering the Boltzmann loop");
         while (count++ < BOLTZ) {
+            double p = partition(length, h, J, count>=4);
+            System.out.println("Partition: "+p);
             for (int i = 0; i < length; i++) {
-                delta_h[i] = ETA * (singleProbs[i] - MMC(i, length, h, J));
+                double adjustedSingleProbs = singleProbs[i];
+                double adjustedMMC = MMC(i, length, h, J, p);
+                // double adjustedMMC = thermalAverage(i, length, h, J, p);
+                delta_h[i] = ETA * (adjustedSingleProbs - adjustedMMC);
+                // System.out.println(i+"\tSingle Prob: "+adjustedSingleProbs+"\tMMC: "+adjustedMMC+"\tdelta h: "+delta_h[i]+"\th: "+(double)(delta_h[i]+h[i]));
             }
             for (int i = 0; i < h.length; i++) {
                 h[i] += delta_h[i];
@@ -475,7 +415,7 @@ public class Main {
      * @param J Hamiltonian constant J
      * @return The thermal average over the Ising distribution
      */
-    public static double thermalAverage(int position, int length, double[] h, double[][] J) {
+    public static double thermalAverage(int position, int length, double[] h, double[][] J, double partition) {
         double sum = 0;
         Random r = new Random();
         for (int i = 0; i < MC; i++) {
@@ -484,7 +424,7 @@ public class Main {
                 rand[j] = r.nextBoolean() ? new Byte((byte) 1) : new Byte((byte) 0);
             }
             rand[position] = 1;
-            sum += Math.exp(-evaluateHamiltonian(rand, h, J));
+            sum += Math.exp(-evaluateHamiltonian(rand, h, J)) / partition;
         }
 
         return sum / MC;
@@ -617,7 +557,7 @@ public class Main {
      * @return double representing the thermal average over the Ising
      * distribution
      */
-    public static double MMC(int position, int length, double[] h, double[][] J) {
+    public static double MMC(int position, int length, double[] h, double[][] J, double partition) {
         Random rand = new Random();
         Byte[] sigma = new Byte[length];
         for (int i = 0; i < length; i++) {
@@ -642,10 +582,11 @@ public class Main {
 
             E += calculateDeltaE(toChange, length, h, J, sigma);
             if (count % MC_RATE == 0) {
-                sum += E;
+                sum += Math.exp(-E)/partition;
             }
             count++;
         }
+        // System.out.println(sum / ((int) (count / MC_RATE)));
         return sum / ((int) (count / MC_RATE));
     }
 
@@ -682,6 +623,7 @@ public class Main {
                 delta_E += J[i][change] * sigma[i];
             }
         }
+        // System.out.println(delta_E);
         return delta_E;
     }
 
@@ -692,20 +634,30 @@ public class Main {
      * the number of amino acids in the distribution. Takes MC_PARTITION totally
      * random samples (no MC-walk for now).
      */
-    public static Double partition(int length, double[] h, double[][] J) {
+    public static Double partition(int length, double[] h, double[][] J, boolean verbose) {
         double sum = 0;
         Random r = new Random();
+        double exponent = -1;
         for (int i = 0; i < MC_PARTITION; i++) {
             Byte[] rand = new Byte[length];
             for (int j = 0; j < length; j++) {
                 rand[j] = r.nextBoolean() ? new Byte((byte) 1) : new Byte((byte) 0);
             }
-            sum += Math.exp(-evaluateHamiltonian(rand, h, J));
+            double x = evaluateHamiltonian(rand,h,J);
+            // if (exponent == -1) exponent = Math.getExponent(x);
+            // x /= Math.exp(exponent);
+            if (verbose) System.out.println("Partition Hamiltonian: "+x);
+            sum += Math.exp(-1*x);
+            if(verbose) System.out.println(i+" partition, sum is "+sum);
             if (i%10000==0) {
-                System.out.println(i+" out of "+MC_PARTITION);
+                // for (int j = 0; j < length; j++) {
+                    // System.out.println(j+" H VALUE "+h[j]);
+                // }
+                System.out.println(i+" out of "+MC_PARTITION+"; sum is "+sum);
             }
         }
-
-        return new Double(sum / MC * Math.pow(2,length));
+        sum *= Math.exp(Math.exp(exponent));
+        System.out.println("Average value is "+(double)(sum / MC_PARTITION));
+        return new Double(sum / MC_PARTITION * Math.pow(2,length));
     }
 }
