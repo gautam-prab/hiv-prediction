@@ -16,11 +16,11 @@ import java.util.logging.Logger;
 public class Main {
 
     //number of Boltzmann learning steps
-    public static final long BOLTZ = 100;
+    public static final long BOLTZ = 10;
     //learning rate for Boltzmann learning
     public static final double ETA = 2;
     //number of steps in walking for MMC
-    public static final long MC_WALK = 10000;
+    public static final long MC_WALK = 100000;
     //number of rejections per sample for MMC
     public static final long MC_RATE = 500;
     //number of Monte Carlo trials in thermalAverage; not currently in use
@@ -103,13 +103,22 @@ public class Main {
         // for (int i = 0; i < bitAlignments.size(); i++) {
         //     System.out.println(names.get(i) + "\t" + evaluateHamiltonian(bitAlignments.get(i), hivUntreated.getH(), hivUntreated.getJ()) + "\t" + evaluateHamiltonian(bitAlignments.get(i), hivTreated.getH(), hivTreated.getJ()));
         // }
-        constantGeneration(new String[]{"hiv-untreated-FINAL.hiv"}, "hiv-untreated_subalign.fasta");
-        constantGeneration(new String[]{"hiv-treated-FINAL.hiv"}, "hiv-rt-treated_subalign.fasta");
+        // constantGeneration(new String[]{"hiv-untreated-FINAL.hiv"}, "hiv-untreated_subalign.fasta");
+        // constantGeneration(new String[]{"hiv-treated-FINAL.hiv"}, "hiv-rt-treated_subalign.fasta");
 
-        // HamiltonianConstants hc_treated = readConstants("hiv-treated.hiv");
-        // HamiltonianConstants hc_untreated = readConstants("hiv-untreated.hiv");
+        HamiltonianConstants hc_treated = readConstants("hiv-treated-FINAL.hiv");
+        HamiltonianConstants hc_untreated = readConstants("hiv-untreated-FINAL.hiv");
 
+        double untreated_partition = partition(410, hc_untreated.getH(), hc_untreated.getJ(), false);
+        double treated_partition = partition(410, hc_treated.getH(), hc_treated.getJ(), false);
 
+        System.out.println("I\tTreated\tUntreated");
+
+        for (int i = 0; i < 410; i++) {
+            double treated = MMC(i, 410, hc_treated.getH(), hc_treated.getJ(), treated_partition);
+            double untreated = MMC(i, 410, hc_untreated.getH(), hc_untreated.getJ(), untreated_partition);
+            System.out.println(i+"\t"+treated+"\t"+untreated);
+        }
     }
 
     /**
@@ -167,8 +176,9 @@ public class Main {
 
         // the below code evaluates the Hamiltonian for each input sequence
         //<editor-fold defaultstate="collapsed" desc="Print Hamiltonians">
+        double partition = partition(consensus.length(), h, J, false);
         for (int i = 0; i < bitAlignments.size(); i++) {
-            System.out.println(names.get(i) + ": " + evaluateHamiltonian(bitAlignments.get(i), hc.getH(), hc.getJ()));
+            System.out.println(names.get(i) + ": " + Math.exp(-1*evaluateHamiltonian(bitAlignments.get(i), hc.getH(), hc.getJ()))/partition);
         }
         //</editor-fold>
 
@@ -377,7 +387,7 @@ public class Main {
         double[][] delta_J = new double[J.length][J[0].length];
         System.out.println("Entering the Boltzmann loop");
         while (count++ < BOLTZ) {
-            double p = partition(length, h, J, count>=4);
+            double p = partition(length, h, J, false);
             System.out.println("Partition: "+p);
             for (int i = 0; i < length; i++) {
                 double adjustedSingleProbs = singleProbs[i];
@@ -656,7 +666,7 @@ public class Main {
                 System.out.println(i+" out of "+MC_PARTITION+"; sum is "+sum);
             }
         }
-        sum *= Math.exp(Math.exp(exponent));
+        // sum *= Math.exp(Math.exp(exponent));
         System.out.println("Average value is "+(double)(sum / MC_PARTITION));
         return new Double(sum / MC_PARTITION * Math.pow(2,length));
     }
