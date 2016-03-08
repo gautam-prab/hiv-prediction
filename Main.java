@@ -20,7 +20,7 @@ public class Main {
     //learning rate for Boltzmann learning
     public static final double ETA = 2;
     //number of steps in walking for MMC
-    public static final long MC_WALK = 100000;
+    public static final long MC_WALK = 10000;
     //number of rejections per sample for MMC
     public static final long MC_RATE = 500;
     //number of Monte Carlo trials in thermalAverage; not currently in use
@@ -103,22 +103,9 @@ public class Main {
         // for (int i = 0; i < bitAlignments.size(); i++) {
         //     System.out.println(names.get(i) + "\t" + evaluateHamiltonian(bitAlignments.get(i), hivUntreated.getH(), hivUntreated.getJ()) + "\t" + evaluateHamiltonian(bitAlignments.get(i), hivTreated.getH(), hivTreated.getJ()));
         // }
-        // constantGeneration(new String[]{"hiv-untreated-FINAL.hiv"}, "hiv-untreated_subalign.fasta");
-        // constantGeneration(new String[]{"hiv-treated-FINAL.hiv"}, "hiv-rt-treated_subalign.fasta");
-
-        HamiltonianConstants hc_treated = readConstants("hiv-treated-FINAL.hiv");
-        HamiltonianConstants hc_untreated = readConstants("hiv-untreated-FINAL.hiv");
-
-        double untreated_partition = partition(410, hc_untreated.getH(), hc_untreated.getJ(), false);
-        double treated_partition = partition(410, hc_treated.getH(), hc_treated.getJ(), false);
-
-        System.out.println("I\tTreated\tUntreated");
-
-        for (int i = 0; i < 410; i++) {
-            double treated = MMC(i, 410, hc_treated.getH(), hc_treated.getJ(), treated_partition);
-            double untreated = MMC(i, 410, hc_untreated.getH(), hc_untreated.getJ(), untreated_partition);
-            System.out.println(i+"\t"+treated+"\t"+untreated);
-        }
+        // constantGeneration(new String[]{"hiv-untreated-new-38.hiv"}, "hiv-untreated_subalign.fasta");
+        // constantGeneration(new String[]{"hiv-treated-new-38.hiv"}, "hiv-rt-treated_subalign.fasta");
+        printSingleProbabilities();
     }
 
     /**
@@ -144,7 +131,7 @@ public class Main {
         // <editor-fold defaultstate="collapsed" desc="Create MSA">
         ArrayList<String> names = new ArrayList<>();
         ArrayList<String> alignments = processMSA(fileScanner, names);
-        String consensus = "-----------------------------KIKAL-EICTEMEKEGKISKIGPENPYNTPVFAIKKKDSTKWRKLVDFRELNKRTQDFWEVQLGIPHPAGLKKKKSVTVLDVGDAYFSVPLD--FRKYTAFTIPS-NNETPGIRYQYNVLPQGWKGSPAIFQSSMTKILEPFRKQNPDIVIYQY-DDLYVGSDLEIGQHR-KIEELR-HLL-WGFTTPDKKHQKEPPFLWMGYELHPDKWTVQPI----------------------------------------------------------------------------------------------------------------------------------------------------------------------";
+        String consensus = "PISPIETVPVKLKPGMDGPKVKQWPLTEEKIKALTEICTEMEKEGKISKIGPENPYNTPVFAIKKKDSTKWRKLVDFRELNKRTQDFWEVQLGIPHPAGLKKKKSVTVLDVGDAYFSVPLDEDFRKYTAFTIPSINNETPGIRYQYNVLPQGWKGSPAIFQSSMTKILEPFRKQNPEIVIYQYMDDLYVGSDLEIGQHRAKIEELRQHLLKWGFTTPDKKHQKEPPFLWMGYELHPDKWTVQPIQLPEKDSWTVNDIQKLVGKLNWASQIYPGIKVRQLCKLLRGAKALTDIVPLTEEAELELAENREILKEPVHGVYYDPSKDLIAEIQKQGQGQWTYQIYQEPFKNLKTGKYARMRGAHTNDVKQLTEAVQKIATESIVIWGKTPKFRLPIQKETWETWWTEYWQATW";
         System.out.println("MSA SIZE: " + alignments.size());
         System.out.println("ALIGNMENT LENGTH: " + alignments.get(0).length());
         System.out.println("CONSENSUS LENGTH: " + consensus.length());
@@ -205,6 +192,22 @@ public class Main {
             Logger.getLogger(Main.class.getName()).log(Level.SEVERE, null, ex);
         }
         //</editor-fold>
+    }
+
+    public static void printSingleProbabilities() {
+      HamiltonianConstants hc_treated = readConstants("hiv-treated-new-38.hiv");
+      HamiltonianConstants hc_untreated = readConstants("hiv-untreated-new-38.hiv");
+
+      double untreated_partition = partition(410, hc_untreated.getH(), hc_untreated.getJ(), false);
+      double treated_partition = partition(410, hc_treated.getH(), hc_treated.getJ(), false);
+
+      System.out.println("I\tTreated\tUntreated");
+
+      for (int i = 0; i < 410; i++) {
+          double treated = MMC(i, 410, hc_treated.getH(), hc_treated.getJ(), treated_partition);
+          double untreated = MMC(i, 410, hc_untreated.getH(), hc_untreated.getJ(), untreated_partition);
+          System.out.println(i+"\t"+treated+"\t"+untreated);
+      }
     }
 
     /**
@@ -289,17 +292,18 @@ public class Main {
      * Converts an amino acid sequence into a binary number using a consensus
      * sequence. Converts each amino acid to {0,1}. 0 denotes the "wild-type"
      * sequence detailed in the consensus. 1 denotes a mutation of any amino
-     * acid or a gap (-) in the sequence.
+     * acid. -1 denotes a gap.
      *
      * @param consensus Consensus sequence denoting the "wild-type"
      * @param protein Mutated protein
      * @return Byte[] of 1's and 0's representing the protein (there is no bit
-     * class and booleans can be unhelpful for math)
+     * class and booleans can be unhelpful for math);
      */
     public static Byte[] proteinToBitString(String consensus, String protein) {
         Byte[] a = new Byte[consensus.length()];
         for (int i = 0; i < consensus.length(); i++) {
             a[i] = booleanToByte(!consensus.substring(i, i + 1).equals(protein.substring(i, i + 1)));
+            if (protein.substring(i, i + 1).equals("-")) a[i] = -1;
         }
         return a;
     }
@@ -333,11 +337,14 @@ public class Main {
     public static double evaluateHamiltonian(Byte[] s, double[] h, double[][] J) {
         double h_sum = 0;
         for (int i = 0; i < s.length; i++) {
+            if (s[i].byteValue() < 0) continue;
             h_sum += s[i] * h[i];
         }
         double J_sum = 0;
         for (int i = 0; i < s.length; i++) {
+            if (s[i].byteValue() < 0) continue;
             for (int j = i + 1; j < s.length; j++) {
+                if(s[j].byteValue() < 0) continue;
                 J_sum += s[i] * s[j] * J[i][j];
             }
         }
@@ -484,13 +491,20 @@ public class Main {
      */
     public static double[] calculateSingleMutationalProbabilities(ArrayList<Byte[]> msa, int length) {
         double[] avgs = new double[length];
+        double[] count = new double[length];
         msa.stream().forEach((b) -> {
             for (int i = 0; i < length; i++) {
-                avgs[i] += b[i].byteValue();
+                if (b[i].byteValue() < 0) {
+                  continue;
+                }
+                else {
+                  avgs[i] += b[i].byteValue();
+                  count[i]++;
+                }
             }
         });
         for (int i = 0; i < length; i++) {
-            avgs[i] /= msa.size();
+            avgs[i] /= count[i];
         }
         return avgs;
     }
@@ -505,16 +519,25 @@ public class Main {
      */
     public static double[][] calculateDoubleMutationalProbabilities(ArrayList<Byte[]> msa, int length) {
         double[][] avgs = new double[length][length];
+        double[][] count = new double[length][length];
         msa.stream().forEach((b) -> {
             for (int i = 0; i < length; i++) {
+                if (b[i].byteValue() < 0) {
+                    continue;
+                }
                 for (int j = i + 1; j < length; j++) {
+                    if (b[j].byteValue() < 0) {
+                        continue;
+                    }
                     avgs[i][j] += b[i].byteValue() * b[j].byteValue();
+                    count[i][j]++;
                 }
             }
         });
         for (int i = 0; i < length; i++) {
             for (int j = i + 1; j < length; j++) {
-                avgs[i][j] /= msa.size();
+                if(count[i][j] == 0) avgs[i][j] = Double.POSITIVE_INFINITY;
+                else avgs[i][j] /= count[i][j];
             }
         }
         return avgs;
