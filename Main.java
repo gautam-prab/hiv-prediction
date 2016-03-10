@@ -12,11 +12,12 @@ import java.util.Scanner;
 import java.util.Random;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.io.PrintWriter;
 
 public class Main {
 
     //number of Boltzmann learning steps
-    public static final long BOLTZ = 10;
+    public static final long BOLTZ = 15;
     //learning rate for Boltzmann learning
     public static final double ETA = 2;
     //number of steps in walking for MMC
@@ -103,9 +104,10 @@ public class Main {
         // for (int i = 0; i < bitAlignments.size(); i++) {
         //     System.out.println(names.get(i) + "\t" + evaluateHamiltonian(bitAlignments.get(i), hivUntreated.getH(), hivUntreated.getJ()) + "\t" + evaluateHamiltonian(bitAlignments.get(i), hivTreated.getH(), hivTreated.getJ()));
         // }
-        // constantGeneration(new String[]{"hiv-untreated-new-38.hiv"}, "hiv-untreated_subalign.fasta");
-        // constantGeneration(new String[]{"hiv-treated-new-38.hiv"}, "hiv-rt-treated_subalign.fasta");
-        printSingleProbabilities();
+        // constantGeneration(new String[]{"hiv-untreated-double-38"}, "hiv-untreated_subalign.fasta");
+        // constantGeneration(new String[]{"hiv-treated-double-38"}, "hiv-rt-treated_subalign.fasta");
+        // printSingleProbabilities();
+        printDoubleProbabilities();
     }
 
     /**
@@ -157,7 +159,7 @@ public class Main {
         double doubleProbs[][] = calculateDoubleMutationalProbabilities(bitAlignments, consensus.length());
         System.out.println("Done with double probs");
         long timer = System.currentTimeMillis();
-        // J = estimateJ(singleProbs, doubleProbs, consensus.length());
+        J = estimateJ(singleProbs, doubleProbs, consensus.length());
         HamiltonianConstants hc = boltzmannLearn(singleProbs, doubleProbs, consensus.length(), h, J);
         // </editor-fold>
 
@@ -195,8 +197,8 @@ public class Main {
     }
 
     public static void printSingleProbabilities() {
-      HamiltonianConstants hc_treated = readConstants("hiv-treated-new-38.hiv");
-      HamiltonianConstants hc_untreated = readConstants("hiv-untreated-new-38.hiv");
+      HamiltonianConstants hc_treated = readConstants("hiv-treated-double-38.hiv");
+      HamiltonianConstants hc_untreated = readConstants("hiv-untreated-double-38.hiv");
 
       double untreated_partition = partition(410, hc_untreated.getH(), hc_untreated.getJ(), false);
       double treated_partition = partition(410, hc_treated.getH(), hc_treated.getJ(), false);
@@ -208,6 +210,57 @@ public class Main {
           double untreated = MMC(i, 410, hc_untreated.getH(), hc_untreated.getJ(), untreated_partition);
           System.out.println(i+"\t"+treated+"\t"+untreated);
       }
+    }
+
+    public static void printDoubleProbabilities() {
+
+      PrintWriter treated, untreated;
+      try {
+          treated = new PrintWriter("treatedDoubles.txt", "UTF-8");
+          untreated = new PrintWriter("untreatedDoubles.txt", "UTF-8");
+      } catch (Exception e) {
+          System.out.println(e);
+          return;
+      }
+      HamiltonianConstants hc_treated = readConstants("hiv-treated-double-38.hiv");
+      HamiltonianConstants hc_untreated = readConstants("hiv-untreated-double-38.hiv");
+
+      double untreated_partition = partition(410, hc_untreated.getH(), hc_untreated.getJ(), false);
+      double treated_partition = partition(410, hc_treated.getH(), hc_treated.getJ(), false);
+
+      treated.println("Treated v");
+      System.out.println("Treated v");
+      for (int i = 0; i < 410; i++) {
+          System.out.println(i);
+          for (int j = 0; j < 410; j++) {
+              if (j > i) {
+                  double treatedMMC = MMC(i, j, 410, hc_treated.getH(), hc_treated.getJ(), treated_partition);
+                  treated.print(treatedMMC+"\t");
+              }
+              else {
+                  treated.print("\t");
+              }
+          }
+          treated.println();
+      }
+      treated.close();
+
+      untreated.println("UNTREATED v");
+      System.out.println("Untreated v");
+      for (int i = 0; i < 410; i++) {
+          System.out.println(i);
+          for (int j = 0; j < 410; j++) {
+              if (j > i) {
+                  double untreatedMMC = MMC(i, j, 410, hc_untreated.getH(), hc_untreated.getJ(), untreated_partition);
+                  untreated.print(untreatedMMC+"\t");
+              }
+              else {
+                  untreated.print("\t");
+              }
+          }
+          untreated.println();
+      }
+      untreated.close();
     }
 
     /**
@@ -401,7 +454,7 @@ public class Main {
                 double adjustedMMC = MMC(i, length, h, J, p);
                 // double adjustedMMC = thermalAverage(i, length, h, J, p);
                 delta_h[i] = ETA * (adjustedSingleProbs - adjustedMMC);
-                // System.out.println(i+"\tSingle Prob: "+adjustedSingleProbs+"\tMMC: "+adjustedMMC+"\tdelta h: "+delta_h[i]+"\th: "+(double)(delta_h[i]+h[i]));
+                System.out.println(i+"\tSingle Prob: "+adjustedSingleProbs+"\tMMC: "+adjustedMMC+"\tdelta h: "+delta_h[i]+"\th: "+(double)(delta_h[i]+h[i]));
             }
             for (int i = 0; i < h.length; i++) {
                 h[i] += delta_h[i];
@@ -605,6 +658,40 @@ public class Main {
             int toChange = rand.nextInt(length);
 
             while (toChange == position) {
+                toChange = rand.nextInt(length); //ensures that we don't change position
+            }
+            if (sigma[toChange] == 1) {
+                sigma[toChange] = 0;
+            } else {
+                sigma[toChange] = 1;
+            }
+
+            E += calculateDeltaE(toChange, length, h, J, sigma);
+            if (count % MC_RATE == 0) {
+                sum += Math.exp(-E)/partition;
+            }
+            count++;
+        }
+        // System.out.println(sum / ((int) (count / MC_RATE)));
+        return sum / ((int) (count / MC_RATE));
+    }
+
+    public static double MMC(int position1, int position2, int length, double[] h, double[][] J, double partition) {
+        Random rand = new Random();
+        Byte[] sigma = new Byte[length];
+        for (int i = 0; i < length; i++) {
+            sigma[i] = 0;
+        }
+        sigma[position1] = 1; //position is the place that must be mutated for a proper average
+        sigma[position2] = 1;
+        double sum = 0.0;
+        int count = 1;
+        double E = evaluateHamiltonian(sigma, h, J);
+        sum += E;
+        while (count < MC_WALK) {
+            int toChange = rand.nextInt(length);
+
+            while (toChange == position1 || toChange == position2) {
                 toChange = rand.nextInt(length); //ensures that we don't change position
             }
             if (sigma[toChange] == 1) {
