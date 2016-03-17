@@ -38,40 +38,7 @@ public class Main {
      * @param args
      */
     public static void main(String args[]) {
-        // // the below code scans a file for resistance mutation scores
-        // // <editor-fold defaultstate="collapsed" desc="Scan File">
-        // Scanner fileScanner;
-        // try {
-        //     fileScanner = new Scanner(new File("nrti.txt"));
-        // } catch (FileNotFoundException e) {
-        //     System.out.println(e.toString());
-        //     return;
-        // }
-        // // </editor-fold>
-        //
-        // // the below code processes the scanner made above to create a list of resistance mutations
-        // // <editor-fold defaultstate="collapsed" desc="Make Resistance Mutation Database">
-        // ArrayList<ResistanceMutations> scores = new ArrayList<>();
-        // while (fileScanner.hasNext()) {
-        //     int position = Integer.parseInt(fileScanner.nextLine());
-        //     char cons = fileScanner.nextLine().charAt(0);
-        //     char aa = fileScanner.nextLine().charAt(0);
-        //     byte threetc = Byte.parseByte(fileScanner.nextLine());
-        //     byte ftc = Byte.parseByte(fileScanner.nextLine());
-        //     byte abc = Byte.parseByte(fileScanner.nextLine());
-        //     byte azt = Byte.parseByte(fileScanner.nextLine());
-        //     byte d4t = Byte.parseByte(fileScanner.nextLine());
-        //     byte ddi = Byte.parseByte(fileScanner.nextLine());
-        //     byte tdf = Byte.parseByte(fileScanner.nextLine());
-        //     if (aa=='i' || aa=='d') continue;
-        //     scores.add(new ResistanceMutations(position, cons, aa, threetc, ftc, abc, azt, d4t, ddi, tdf));
-        // }
-        // // </editor-fold>
-        //
-        // System.out.println("pos\tcons\taa\t3tc\tftc\tabc\tazt\td4t\tddi\ttdf");
-        // for (ResistanceMutations rm : scores) {
-        //     System.out.println(rm);
-        // }
+
         // constantGeneration(args);
 
         // <editor-fold defaultstate="collapsed" desc="Scan File">
@@ -105,9 +72,43 @@ public class Main {
         //     System.out.println(names.get(i) + "\t" + evaluateHamiltonian(bitAlignments.get(i), hivUntreated.getH(), hivUntreated.getJ()) + "\t" + evaluateHamiltonian(bitAlignments.get(i), hivTreated.getH(), hivTreated.getJ()));
         // }
         // constantGeneration(new String[]{"hiv-untreated-double-38"}, "hiv-untreated_subalign.fasta");
-        // constantGeneration(new String[]{"hiv-treated-double-38"}, "hiv-rt-treated_subalign.fasta");
+        // constantGeneration(new String[]{"hiv-treated-double-38"}, "hiv-treated_subalign.fasta");
         // printSingleProbabilities();
-        printDoubleProbabilities();
+        // printDoubleProbabilities();
+        // the below code scans a file for an MSA in FASTA format
+        // <editor-fold defaultstate="collapsed" desc="Scan File">
+        Scanner fileScanner;
+        try {
+            fileScanner = new Scanner(new File("hiv-subtypes-final-alignment.fasta"));
+        } catch (FileNotFoundException e) {
+            System.out.println(e.toString());
+            return;
+        }
+        // </editor-fold>
+
+        // the below code processes the scanner made above to create an MSA (multiple sequence alignment)
+        // <editor-fold defaultstate="collapsed" desc="Create MSA">
+        ArrayList<String> names = new ArrayList<>();
+        ArrayList<String> alignments = processMSA(fileScanner, names);
+        String consensus = "PISPIETVPVKLKPGMDGPKVKQWPLTEEKIKALTEICTEMEKEGKISKIGPENPYNTPVFAIKKKDSTKWRKLVDFRELNKRTQDFWEVQLGIPHPAGLKKKKSVTVLDVGDAYFSVPLDEDFRKYTAFTIPSINNETPGIRYQYNVLPQGWKGSPAIFQSSMTKILEPFRKQNPEIVIYQYMDDLYVGSDLEIGQHRAKIEELRQHLLKWGFTTPDKKHQKEPPFLWMGYELHPDKWTVQPIQLPEKDSWTVNDIQKLVGKLNWASQIYPGIKVRQLCKLLRGAKALTDIVPLTEEAELELAENREILKEPVHGVYYDPSKDLIAEIQKQGQGQWTYQIYQEPFKNLKTGKYARMRGAHTNDVKQLTEAVQKIATESIVIWGKTPKFRLPIQKETWETWWTEYWQATW";
+        System.out.println("MSA SIZE: " + alignments.size());
+        System.out.println("ALIGNMENT LENGTH: " + alignments.get(0).length());
+        System.out.println("CONSENSUS LENGTH: " + consensus.length());
+        ArrayList<Byte[]> bitAlignments = new ArrayList<>();
+        alignments.stream().forEach((s) -> {
+            System.out.println(s);
+            bitAlignments.add(proteinToBitString(consensus, s));
+        });
+        // </editor-fold>
+
+        HamiltonianConstants hivUntreated = readConstants("hiv-untreated-double-38.hiv");
+        HamiltonianConstants hivTreated = readConstants("hiv-treated-double-38.hiv");
+
+        double untreatedPartition = partition(consensus.length(), hivUntreated.getH(), hivUntreated.getJ(), false);
+        double treatedPartition = partition(consensus.length(), hivTreated.getH(), hivTreated.getJ(), false);
+        for (int i = 0; i < bitAlignments.size(); i++) {
+            System.out.println(names.get(i) + ":\t" + Math.exp(-1*evaluateHamiltonian(bitAlignments.get(i), hivUntreated.getH(), hivUntreated.getJ()))/untreatedPartition + "\t" + Math.exp(-1*evaluateHamiltonian(bitAlignments.get(i), hivTreated.getH(), hivTreated.getJ()))/treatedPartition);
+        }
     }
 
     /**
@@ -196,6 +197,9 @@ public class Main {
         //</editor-fold>
     }
 
+    /**
+    * Prints out average probabilities of single mutations using MMC
+    */
     public static void printSingleProbabilities() {
       HamiltonianConstants hc_treated = readConstants("hiv-treated-double-38.hiv");
       HamiltonianConstants hc_untreated = readConstants("hiv-untreated-double-38.hiv");
@@ -212,6 +216,9 @@ public class Main {
       }
     }
 
+    /**
+    * Prints out average probabilities of double mutations using MMC
+    */
     public static void printDoubleProbabilities() {
 
       PrintWriter treated, untreated;
@@ -633,8 +640,7 @@ public class Main {
      *
      * This used to be done differently, rejecting based on whether or not it
      * increased the energy. I used this algorithm from Beichl and Sullivan,
-     * 2000. However, this was a mistake to use because it is useful for finding
-     * a local minimum of maximum but not for taking a straight average.
+     * 2000.
      *
      * @param position position of amino acid that is mutated
      * @param length length of protein
@@ -676,6 +682,28 @@ public class Main {
         return sum / ((int) (count / MC_RATE));
     }
 
+    /**
+    *
+    * Follows basic sampling procedures found in the Supplementary Methods of
+    * Ferguson et. al. This is essentially the same as the thermal average
+    * function, but instead of generating random sequences each time, it
+    * "steps" through all possible states (as in a Markov Chain) and records
+    * the CHANGE in energy each time. That way, evaluateHamiltonian() is only
+    * called once. Then we just record every MC_RATE state and average.
+    *
+    * This used to be done differently, rejecting based on whether or not it
+    * increased the energy. I used this algorithm from Beichl and Sullivan,
+    * 2000.
+    *
+    * @param position1 position of the first amino acid that is mutated
+    * @param position2 position of the second amino acid that is mutated
+    * @param length length of protein
+    * @param h current h vector
+    * @param J current J matrix
+    * @return double representing the thermal average over the Ising
+    * distribution
+    *
+    */
     public static double MMC(int position1, int position2, int length, double[] h, double[][] J, double partition) {
         Random rand = new Random();
         Byte[] sigma = new Byte[length];
@@ -753,6 +781,13 @@ public class Main {
      * Finds the partition function as an average over the Ising distribution times
      * the number of amino acids in the distribution. Takes MC_PARTITION totally
      * random samples (no MC-walk for now).
+     *
+     * This took a lot of tuning because it requires the use of extremely small numbers that the computer
+     * occasionally defaulted to zero. However, these really small numbers sum up in large averages to
+     * huge numbers. The partition function essentially finds the sum of all values in the Ising model.
+     *
+     * Dividing an energy value by the value of the partition function changes it into a probability because
+     * then the sum of all energies divided by the partition is 1.0
      */
     public static Double partition(int length, double[] h, double[][] J, boolean verbose) {
         double sum = 0;
